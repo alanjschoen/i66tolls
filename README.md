@@ -1,6 +1,6 @@
 # i66tolls
 
-Command-line tool for checking current tolls on I-66 inside the Capital Beltway (between I-495 and the Theodore Roosevelt Bridge).
+Vibecoded command-line tool for checking current tolls on I-66 inside the Capital Beltway (between I-495 and the Theodore Roosevelt Bridge).
 
 Data comes from VDOT's official toll calculator at [vai66tolls.com](https://vai66tolls.com/).
 
