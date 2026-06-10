@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "i66tolls"
+version = "0.1.0"
+description = "CLI for I-66 inside-the-Beltway toll lookups"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.scripts]
+i66tolls = "i66tolls.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["i66tolls*"]
