@@ -8,9 +8,13 @@ version = "0.1.0"
 description = "CLI for I-66 inside-the-Beltway toll lookups"
 readme = "README.md"
 requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.12",
+    "inquirerpy>=0.3.4",
+]
 
 [project.scripts]
-i66tolls = "i66tolls.cli:main"
+i66tolls = "i66tolls.cli:main_entry"
 
 [tool.setuptools.packages.find]
 include = ["i66tolls*"]

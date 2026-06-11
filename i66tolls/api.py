@@ -15,12 +15,14 @@ BASE_URL = "https://vai66tolls.com/Index"
 EASTERN = ZoneInfo("US/Eastern")
 OPTION_RE = re.compile(r'<option value="(\d+)">([^<]+)</option>')
 
+Direction = Literal["eastbound", "westbound"]
+
 
 @dataclass(frozen=True)
 class Interchange:
     id: int
     name: str
-    direction: Literal["eastbound", "westbound"]
+    direction: Direction
 
 
 def _fetch(handler: str, params: dict[str, str]) -> str:
@@ -34,7 +36,7 @@ def _parse_options(html: str) -> list[tuple[int, str]]:
 
 
 def _entries_for_direction(eastbound: bool) -> list[Interchange]:
-    direction: Literal["eastbound", "westbound"] = "eastbound" if eastbound else "westbound"
+    direction: Direction = "eastbound" if eastbound else "westbound"
     html = _fetch("BeginIntPartial", {"rbEastVal": "true" if eastbound else "false"})
     return [Interchange(id=id_, name=name, direction=direction) for id_, name in _parse_options(html)]
 
@@ -52,65 +54,52 @@ def list_exits(entry: Interchange) -> list[tuple[int, str]]:
     return _parse_options(html)
 
 
-def _current_toll_time() -> tuple[str, str]:
-    now = datetime.now(EASTERN)
-    return now.strftime("%m/%d/%Y"), now.strftime("%I:%M %p")
-
-
-def get_toll(entry: Interchange, exit_id: int) -> float:
-    date_picked, time_picked = _current_toll_time()
+def get_toll(
+    entry: Interchange,
+    exit_id: int,
+    *,
+    at: Optional[datetime] = None,
+    is_current: bool = True,
+) -> float:
+    when = at.astimezone(EASTERN) if at is not None else datetime.now(EASTERN)
     eastbound = entry.direction == "eastbound"
     body = _fetch(
         "TollCalcPartial",
         {
             "bIntId": str(entry.id),
             "eIntId": str(exit_id),
-            "datePicked": date_picked,
-            "timePicked": time_picked,
+            "datePicked": when.strftime("%m/%d/%Y"),
+            "timePicked": when.strftime("%I:%M %p"),
             "rbEastVal": "true" if eastbound else "false",
-            "isCurrent": "true",
+            "isCurrent": "true" if is_current else "false",
         },
     )
     return float(json.loads(body)["decToll"])
 
 
-def resolve_entry(
-    query: str,
-    direction: Optional[Literal["eastbound", "westbound"]] = None,
-) -> Interchange:
-    entries = list_entries()
-    if direction is not None:
-        entries = [entry for entry in entries if entry.direction == direction]
-
-    if query.isdigit():
-        matches = [entry for entry in entries if entry.id == int(query)]
-    else:
-        needle = query.casefold()
-        matches = [entry for entry in entries if needle in entry.name.casefold()]
+def infer_direction(entry_id: int, exit_id: int) -> Direction:
+    matches: list[Direction] = []
+    for eastbound in (True, False):
+        entries = _entries_for_direction(eastbound)
+        entry_matches = [entry for entry in entries if entry.id == entry_id]
+        if not entry_matches:
+            continue
+        entry = entry_matches[0]
+        if any(option_id == exit_id for option_id, _ in list_exits(entry)):
+            matches.append(entry.direction)
 
     if not matches:
-        raise ValueError(f"No entry matching {query!r}")
+        raise ValueError(f"No route found for entry {entry_id} and exit {exit_id}")
 
     if len(matches) > 1:
-        lines = "\n".join(f"  {entry.id:>2}  {entry.name} ({entry.direction})" for entry in matches)
-        raise ValueError(f"Multiple entries match {query!r}:\n{lines}")
+        raise ValueError(f"Entry {entry_id} and exit {exit_id} are ambiguous across directions")
 
     return matches[0]
 
 
-def resolve_exit(entry: Interchange, query: str) -> tuple[int, str]:
-    exits = list_exits(entry)
-    if query.isdigit():
-        matches = [(id_, name) for id_, name in exits if id_ == int(query)]
-    else:
-        needle = query.casefold()
-        matches = [(id_, name) for id_, name in exits if needle in name.casefold()]
-
-    if not matches:
-        raise ValueError(f"No exit matching {query!r} for entry {entry.name}")
-
-    if len(matches) > 1:
-        lines = "\n".join(f"  {id_:>2}  {name}" for id_, name in matches)
-        raise ValueError(f"Multiple exits match {query!r}:\n{lines}")
-
-    return matches[0]
+def lookup_entry(entry_id: int, direction: Direction) -> Interchange:
+    entries = _entries_for_direction(direction == "eastbound")
+    for entry in entries:
+        if entry.id == entry_id:
+            return entry
+    raise ValueError(f"Entry {entry_id} not found for {direction}")

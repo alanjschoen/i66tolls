@@ -1,13 +1,16 @@
 # i66tolls
 
-Vibecoded command-line tool for checking current tolls on I-66 inside the Capital Beltway (between I-495 and the Theodore Roosevelt Bridge).
+Vibe coded command-line tool for checking tolls on I-66 inside the Capital Beltway (between I-495 and the Theodore Roosevelt Bridge).
+
+Run it with no arguments for an interactive wizard, or pass entry/exit IDs and flags for a quick lookup.
 
 Data comes from VDOT's official toll calculator at [vai66tolls.com](https://vai66tolls.com/).
 
 ## Requirements
 
 - Python 3.10+
-- No third-party dependencies
+- [Typer](https://typer.tiangolo.com/) for the CLI
+- [InquirerPy](https://inquirerpy.readthedocs.io/) for interactive prompts
 
 ## Install
 
@@ -15,62 +18,72 @@ Data comes from VDOT's official toll calculator at [vai66tolls.com](https://vai6
 pip install -e .
 ```
 
-Or run without installing:
+## Interactive mode
 
 ```bash
-python -m i66tolls list-entries
+i66tolls
 ```
 
-## Usage
+1. **Direction** — `current`, eastbound, or westbound
+   - `current` uses the system clock. If no toll period is active, prints a message and exits.
+   - Eastbound/westbound continues to entry selection for that direction.
+2. **Entry** — choose an entry interchange
+3. **Exit** — choose an exit interchange
+4. **When** — `current` or `historic` (skipped if you already chose `current` in step 1)
+5. **Date/time** — for historic lookups (Typer has no datetime picker; InquirerPy prompts for `MM/DD/YYYY HH:MM AM/PM`)
 
-### List entry points
+Use **↑/↓** and **Enter** to select. Press **←** to go back to the previous step (even for values pre-filled from the command line).
+
+## Non-interactive mode
+
+Provide entry and exit IDs (and any other options) to skip prompts:
 
 ```bash
-i66tolls list-entries
+i66tolls 1 10 -c
+i66tolls 1 10 --current
+i66tolls 16 1 -w -c
+i66tolls 1 10 -t "06/10/2026 08:00 AM"
 ```
 
-Shows eastbound (AM) and westbound (PM) entry interchanges with their IDs.
+When both entry and exit are given, direction is inferred automatically.
 
-### List exits for an entry
+### Options
 
-```bash
-i66tolls list-exits "I-66 West"
-i66tolls list-exits 1
-```
+| Flag | Description |
+|------|-------------|
+| `-e`, `--eastbound` | Eastbound route |
+| `-w`, `--westbound` | Westbound route |
+| `-c`, `--current` | Use the current toll rate |
+| `-t`, `--time` | Historic date/time (`MM/DD/YYYY HH:MM AM/PM`, US/Eastern) |
 
-Entry can be an ID or a partial name (case-insensitive).
+### Conflicts
 
-### Get the current toll
+- `--eastbound` and `--westbound` cannot be used together
+- `--current` and `--time` cannot be used together
+- Provide both entry and exit IDs, or neither
 
-```bash
-i66tolls toll "I-66 West" Westmoreland
-i66tolls toll 16 1 --west
-```
-
-Exit can also be an ID or partial name.
-
-### Direction flags
-
-Some IDs and names exist in both directions (e.g. `4` / Route 7). Use `--east` or `--west` to disambiguate:
-
-```bash
-i66tolls list-exits 4 --east
-i66tolls toll 4 10 --east
-```
+Partial arguments (e.g. only entry) require a TTY for the interactive wizard.
 
 ## Toll hours
 
-Tolls are only charged during peak periods on weekdays:
-
 | Direction | Hours |
 |-----------|-------|
-| Eastbound (toward DC) | 5:30–9:30 AM |
-| Westbound (toward Beltway) | 3:00–7:00 PM |
+| Eastbound (toward DC) | Weekdays 5:30–9:30 AM |
+| Westbound (toward Beltway) | Weekdays 3:00–7:00 PM |
 
-Outside these windows, tolls show as `$0.00`. Federal holidays are also toll-free.
+Outside these windows, current tolls show as unavailable. Federal holidays are also toll-free.
+
+## Entry and exit IDs
+
+Run `i66tolls` and browse the interactive lists, or query the API directly:
+
+```bash
+curl -s "https://vai66tolls.com/Index?handler=BeginIntPartial&rbEastVal=true" | grep option
+curl -s "https://vai66tolls.com/Index?handler=ExitIntPartial&bIntId=1&rbEastVal=true" | grep option
+```
 
 ## Data source
 
-This tool queries the same backend API used by [vai66tolls.com](https://vai66tolls.com/). Toll amounts are estimates and can change before you reach the road.
+This tool uses the same backend API as [vai66tolls.com](https://vai66tolls.com/). Amounts are estimates and can change before you reach the road.
 
-The `reference/tolls.py` file is the original [Alexa skill](https://www.mcgurrin.info/robots/570/) that used a different SmarterRoads XML feed. That public endpoint is no longer available; this CLI uses the vai66tolls API instead.
+`reference/tolls.py` is the original Alexa skill that used a SmarterRoads XML feed. That public endpoint is no longer available.
