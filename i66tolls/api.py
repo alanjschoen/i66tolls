@@ -60,7 +60,7 @@ def get_toll(
     *,
     at: Optional[datetime] = None,
     is_current: bool = True,
-) -> float:
+) -> Optional[float]:
     when = at.astimezone(EASTERN) if at is not None else datetime.now(EASTERN)
     eastbound = entry.direction == "eastbound"
     body = _fetch(
@@ -74,7 +74,10 @@ def get_toll(
             "isCurrent": "true" if is_current else "false",
         },
     )
-    return float(json.loads(body)["decToll"])
+    amount = float(json.loads(body)["decToll"])
+    if amount == -1:
+        return None
+    return amount
 
 
 def infer_direction(entry_id: int, exit_id: int) -> Direction:

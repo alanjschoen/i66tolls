@@ -318,6 +318,9 @@ def show_result(state: WizardState) -> None:
     )
     label = _direction_label(state.direction)
     when_label = at.strftime("%m/%d/%Y %I:%M %p") if state.when == "historic" else "now"
+    if amount is None:
+        typer.echo(f"{label}: {state.entry.name} → {state.exit_name}: Data Not Available ({when_label})")
+        return
     typer.echo(f"{label}: {state.entry.name} → {state.exit_name}: ${amount:.2f} ({when_label})")
 
 
