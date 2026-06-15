@@ -12,6 +12,13 @@ from i66tolls.wizard import build_initial_state, run
 
 EASTERN = ZoneInfo("US/Eastern")
 
+# for python 3.10 compatibility
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+
 
 def _parse_time(value: Optional[str]) -> Optional[datetime]:
     if value is None:
@@ -25,6 +32,7 @@ def _parse_time(value: Optional[str]) -> Optional[datetime]:
     return parsed.replace(tzinfo=EASTERN)
 
 
+@app.command()
 def main(
     entry: Optional[int] = typer.Argument(None, help="entry interchange ID"),
     exit: Optional[int] = typer.Argument(None, help="exit interchange ID"),
@@ -89,7 +97,7 @@ def main(
 
 
 def main_entry() -> None:
-    typer.run(main)
+    app()
 
 
 if __name__ == "__main__":
