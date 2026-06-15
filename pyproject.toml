@@ -7,14 +7,42 @@ name = "i66tolls"
 version = "0.1.0"
 description = "CLI for I-66 inside-the-Beltway toll lookups"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
+authors = [
+    { name = "Alan Schoen", email = "alanschoen@gmail.com" },
+]
+keywords = ["i66", "tolls", "virginia", "vdot", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Terminals",
+]
 dependencies = [
     "typer>=0.12",
     "inquirerpy>=0.3.4",
 ]
 
+[project.urls]
+Homepage = "https://github.com/alanjschoen/i66tolls"
+Repository = "https://github.com/alanjschoen/i66tolls"
+Issues = "https://github.com/alanjschoen/i66tolls/issues"
+
 [project.scripts]
 i66tolls = "i66tolls.cli:main_entry"
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2",
+    "twine>=5.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["i66tolls*"]
