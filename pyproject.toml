@@ -43,7 +43,11 @@ i66tolls = "i66tolls.cli:main_entry"
 dev = [
     "build>=1.2",
     "twine>=5.0",
+    "pytest>=8.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
 include = ["i66tolls*"]

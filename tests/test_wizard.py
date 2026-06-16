@@ -1,0 +1,135 @@
+from datetime import datetime
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
+
+import pytest
+
+from i66tolls.api import Interchange
+from i66tolls.wizard import (
+    Step,
+    WizardState,
+    build_initial_state,
+    compute_steps,
+    is_complete,
+    show_result,
+)
+
+EASTERN = ZoneInfo("US/Eastern")
+
+
+def test_compute_steps_includes_datetime_after_historic() -> None:
+    state = WizardState(
+        direction_choice="eastbound",
+        direction="eastbound",
+        entry=Interchange(1, "I-66 West", "eastbound"),
+        exit_id=16,
+        exit_name="Washington",
+        when="historic",
+    )
+    steps = compute_steps(state)
+    assert Step.WHEN not in steps
+    assert Step.DATETIME in steps
+
+
+def test_compute_steps_skips_when_for_current_direction_choice() -> None:
+    state = WizardState(
+        direction_choice="current",
+        direction="eastbound",
+        when="current",
+        at=datetime.now(EASTERN),
+    )
+    steps = compute_steps(state)
+    assert Step.WHEN not in steps
+    assert Step.DATETIME not in steps
+
+
+def test_is_complete_historic_requires_datetime() -> None:
+    state = WizardState(
+        direction_choice="eastbound",
+        direction="eastbound",
+        entry=Interchange(1, "I-66 West", "eastbound"),
+        exit_id=10,
+        when="historic",
+    )
+    assert not is_complete(state)
+
+
+def test_is_complete_historic_with_datetime() -> None:
+    state = WizardState(
+        direction_choice="eastbound",
+        direction="eastbound",
+        entry=Interchange(1, "I-66 West", "eastbound"),
+        exit_id=10,
+        when="historic",
+        at=datetime(2026, 6, 10, 8, 0, tzinfo=EASTERN),
+    )
+    assert is_complete(state)
+
+
+@patch("i66tolls.wizard.list_exits", return_value=[(10, "Westmoreland St")])
+@patch("i66tolls.wizard.lookup_entry", return_value=Interchange(1, "I-66 West", "eastbound"))
+@patch("i66tolls.wizard.infer_direction", return_value="eastbound")
+def test_build_initial_state_from_cli_args(
+    _infer: object,
+    _lookup: object,
+    _exits: object,
+) -> None:
+    state = build_initial_state(
+        entry_id=1,
+        exit_id=10,
+        at=None,
+        direction=None,
+        direction_choice="current",
+        when="current",
+    )
+    assert state.entry is not None
+    assert state.exit_id == 10
+    assert state.when == "current"
+    assert Step.ENTRY in state.skip_prompt
+    assert Step.EXIT in state.skip_prompt
+
+
+def test_build_initial_state_entry_requires_direction() -> None:
+    with pytest.raises(ValueError, match="entry requires"):
+        build_initial_state(
+            entry_id=1,
+            exit_id=None,
+            at=None,
+            direction=None,
+            direction_choice=None,
+            when=None,
+        )
+
+
+@patch("i66tolls.wizard.get_toll", return_value=4.5)
+def test_show_result_formats_toll(_get_toll: object) -> None:
+    state = WizardState(
+        direction_choice="eastbound",
+        direction="eastbound",
+        entry=Interchange(1, "I-66 West", "eastbound"),
+        exit_id=10,
+        exit_name="Westmoreland St",
+        when="historic",
+        at=datetime(2026, 6, 10, 8, 0, tzinfo=EASTERN),
+    )
+    with patch("typer.echo") as echo:
+        show_result(state)
+    echo.assert_called_once()
+    assert "$4.50" in echo.call_args.args[0]
+    assert "06/10/2026 08:00 AM" in echo.call_args.args[0]
+
+
+@patch("i66tolls.wizard.get_toll", return_value=None)
+def test_show_result_data_not_available(_get_toll: object) -> None:
+    state = WizardState(
+        direction_choice="eastbound",
+        direction="eastbound",
+        entry=Interchange(1, "I-66 West", "eastbound"),
+        exit_id=10,
+        exit_name="Westmoreland St",
+        when="historic",
+        at=datetime(2026, 6, 10, 8, 0, tzinfo=EASTERN),
+    )
+    with patch("typer.echo") as echo:
+        show_result(state)
+    assert "Data Not Available" in echo.call_args.args[0]
