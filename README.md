@@ -12,8 +12,7 @@ Data comes from VDOT's official toll calculator at [vai66tolls.com](https://vai6
 
 - Python 3.10+
 - [Typer](https://typer.tiangolo.com/) for the CLI
-- [InquirerPy](https://inquirerpy.readthedocs.io/) for interactive prompts
-- [its-a-dt](https://pypi.org/project/its-a-dt/) for historic date/time selection
+- [prompt_toolkit](https://python-prompt-toolkit.readthedocs.io/) and [its-a-dt](https://pypi.org/project/its-a-dt/) for interactive prompts
 
 ## Install
 

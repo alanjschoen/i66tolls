@@ -27,8 +27,8 @@ classifiers = [
 ]
 dependencies = [
     "typer>=0.12",
-    "inquirerpy>=0.3.4",
     "its-a-dt>=0.1.1",
+    "prompt-toolkit>=3.0",
 ]
 
 [project.urls]
