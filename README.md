@@ -13,6 +13,7 @@ Data comes from VDOT's official toll calculator at [vai66tolls.com](https://vai6
 - Python 3.10+
 - [Typer](https://typer.tiangolo.com/) for the CLI
 - [InquirerPy](https://inquirerpy.readthedocs.io/) for interactive prompts
+- [its-a-dt](https://pypi.org/project/its-a-dt/) for historic date/time selection
 
 ## Install
 
@@ -40,11 +41,11 @@ i66tolls
 2. **Entry** — choose an entry interchange
 3. **Exit** — choose an exit interchange
 4. **When** — `current` or `historic` (skipped if you already chose `current` in step 1)
-5. **Date/time** — for historic lookups (Typer has no datetime picker; InquirerPy prompts for `MM/DD/YYYY HH:MM AM/PM`)
+5. **Date/time** — for historic lookups, an interactive date/time picker ([its-a-dt](https://pypi.org/project/its-a-dt/))
 
 Use **↑/↓** and **Enter** to select. Press **←** to go back to the previous step (even for values pre-filled from the command line).
 
-## Non-interactive mode
+## Provide arguments to skip interactive steps
 
 Provide entry and exit IDs (and any other options) to skip prompts:
 
@@ -71,8 +72,6 @@ When both entry and exit are given, direction is inferred automatically.
 - `--eastbound` and `--westbound` cannot be used together
 - `--current` and `--time` cannot be used together
 - Provide both entry and exit IDs, or neither
-
-Partial arguments (e.g. only entry) require a TTY for the interactive wizard.
 
 ## Toll hours
 
