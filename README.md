@@ -6,6 +6,8 @@ Run it with no arguments for an interactive wizard, or pass entry/exit IDs and f
 
 Data comes from VDOT's official toll calculator at [vai66tolls.com](https://vai66tolls.com/).
 
+![Demo](demo.gif)
+
 ## Requirements
 
 - Python 3.10+
