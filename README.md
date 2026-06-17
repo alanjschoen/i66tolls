@@ -16,7 +16,7 @@ There are 3-4 tolling segments in each direction. The price you pay for driving 
 There are more exits and entries than segments. The 3 segments are shown in this graphic
 
 
-[![I-66 toll segments](docs/i-66-customer-map-v4.png)](https://ride66express.com/wp-content/uploads/2023/09/i-66-customer-map-v4.pdf)
+[![I-66 toll segments](assets/i-66-customer-map-v4.png)](https://ride66express.com/wp-content/uploads/2023/09/i-66-customer-map-v4.pdf)
 
 
 Eastbound segments (AM commute):
