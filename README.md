@@ -15,7 +15,10 @@ There are 3-4 tolling segments in each direction. The price you pay for driving 
 
 There are more exits and entries than segments. The 3 segments are shown in this graphic
 
-![Zone Map](https://ride66express.com/wp-content/uploads/2023/09/i-66-customer-map-v4.pdf)
+<iframe src="https://ride66express.com/wp-content/uploads/2023/09/i-66-customer-map-v4.pdf" width="100%" height="600px">
+    This browser does not support PDFs. Please download the PDF to view it.
+</iframe>
+
 
 Eastbound segments (AM commute):
 - **Segment 1:** From I-495 to the Dulles Connector Road (Exit 67).
