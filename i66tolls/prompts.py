@@ -7,7 +7,8 @@ from datetime import datetime
 from typing import Generic, Optional, TypeVar, Union
 from zoneinfo import ZoneInfo
 
-from its_a_dt import Bounds, GoBack as DtGoBack, pick_datetime
+from its_a_dt import Bounds, pick_datetime
+from its_a_dt import GoBack as DtGoBack
 from prompt_toolkit.application import Application
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.key_binding import KeyBindings
@@ -18,7 +19,7 @@ from prompt_toolkit.layout.layout import Window
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
 
-from i66tolls.hours import EASTBOUND_LABEL, WESTBOUND_LABEL
+from i66tolls.hours import CURRENT_LABEL, EASTBOUND_LABEL, WESTBOUND_LABEL
 
 EASTERN = ZoneInfo("US/Eastern")
 T = TypeVar("T")
@@ -125,7 +126,7 @@ def select_direction(
     default: Optional[str] = None,
 ) -> Union[str, type[GoBack]]:
     choices: list[tuple[str, str]] = [
-        ("current", "current"),
+        ("current", CURRENT_LABEL),
         ("eastbound", EASTBOUND_LABEL),
         ("westbound", WESTBOUND_LABEL),
     ]
@@ -148,11 +149,17 @@ def select_when(*, default: Optional[str] = None) -> Union[str, type[GoBack]]:
     return _pick_list("When", choices, default=default)
 
 
-def prompt_datetime(*, default: Optional[datetime] = None) -> Union[datetime, type[GoBack]]:
+def prompt_datetime(
+    *, default: Optional[datetime] = None
+) -> Union[datetime, type[GoBack]]:
     now = datetime.now(EASTERN).replace(tzinfo=None)
     default_naive = None
     if default is not None:
-        default_naive = default.astimezone(EASTERN).replace(tzinfo=None) if default.tzinfo else default
+        default_naive = (
+            default.astimezone(EASTERN).replace(tzinfo=None)
+            if default.tzinfo
+            else default
+        )
 
     result = pick_datetime(
         bounds=Bounds(max=now),

@@ -7,6 +7,7 @@ from typing import Literal, Optional
 
 Direction = Literal["eastbound", "westbound"]
 
+CURRENT_LABEL = "Current estimate"
 EASTBOUND_LABEL = "Eastbound (AM, 5:30–9:30)"
 WESTBOUND_LABEL = "Westbound (PM, 3:00–7:00)"
 

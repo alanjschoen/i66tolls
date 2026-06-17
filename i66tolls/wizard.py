@@ -20,7 +20,13 @@ from i66tolls.api import (
     list_exits,
     lookup_entry,
 )
-from i66tolls.hours import EASTBOUND_LABEL, WESTBOUND_LABEL, active_direction, toll_window_active
+from i66tolls.hours import (
+    CURRENT_LABEL,
+    EASTBOUND_LABEL,
+    WESTBOUND_LABEL,
+    active_direction,
+    toll_window_active,
+)
 from i66tolls.prompts import GoBack
 
 EASTERN = ZoneInfo("US/Eastern")
@@ -101,7 +107,9 @@ def build_initial_state(
         state.skip_prompt.add(Step.EXIT)
     elif entry_id is not None:
         if state.direction is None:
-            raise ValueError("entry requires --eastbound/--westbound or an exit to infer direction")
+            raise ValueError(
+                "entry requires --eastbound/--westbound or an exit to infer direction"
+            )
         state.entry = lookup_entry(entry_id, state.direction)
         state.skip_prompt.add(Step.ENTRY)
 
@@ -169,11 +177,15 @@ def _run_step(state: WizardState, step: Step):
             raise RuntimeError("direction must be set before entry selection")
         entries = _entries_for_direction(state.direction == "eastbound")
         options = [(entry.id, entry.name) for entry in entries]
-        result = prompts.select_interchange("Entry", options, default_id=_prefill_value(state, step))
+        result = prompts.select_interchange(
+            "Entry", options, default_id=_prefill_value(state, step)
+        )
         if result is GoBack:
             return GoBack
         entry_id, entry_name = result
-        state.entry = Interchange(id=entry_id, name=entry_name, direction=state.direction)
+        state.entry = Interchange(
+            id=entry_id, name=entry_name, direction=state.direction
+        )
         return None
 
     if step == Step.EXIT:
@@ -277,7 +289,11 @@ def run_wizard(state: WizardState) -> WizardState:
             break
 
         if _should_skip_step(state, step):
-            if step == Step.DIRECTION and state.direction_choice == "current" and state.direction is None:
+            if (
+                step == Step.DIRECTION
+                and state.direction_choice == "current"
+                and state.direction is None
+            ):
                 _apply_direction(state, "current")
             state.skip_prompt.discard(step)
             continue
@@ -303,7 +319,9 @@ def show_result(state: WizardState) -> None:
     if state.when is None:
         raise RuntimeError("incomplete wizard state: when is unset")
     if state.when == "historic" and state.at is None:
-        raise RuntimeError("incomplete wizard state: historic lookup requires a date/time")
+        raise RuntimeError(
+            "incomplete wizard state: historic lookup requires a date/time"
+        )
 
     at = state.at if state.at is not None else datetime.now(EASTERN)
     if state.when == "current" and not toll_window_active(at, state.direction):
@@ -319,13 +337,23 @@ def show_result(state: WizardState) -> None:
     label = _direction_label(state.direction)
     when_label = at.strftime("%m/%d/%Y %I:%M %p") if state.when == "historic" else "now"
     if amount is None:
-        typer.echo(f"{label}: {state.entry.name} → {state.exit_name}: Data Not Available ({when_label})")
+        typer.echo(
+            f"{label}: {state.entry.name} → {state.exit_name}: Data Not Available ({when_label})"
+        )
         return
-    typer.echo(f"{label}: {state.entry.name} → {state.exit_name}: ${amount:.2f} ({when_label})")
+    typer.echo(
+        f"{label}: {state.entry.name} → {state.exit_name}: ${amount:.2f} ({when_label})"
+    )
 
 
 def _direction_label(direction: Direction) -> str:
-    return EASTBOUND_LABEL if direction == "eastbound" else WESTBOUND_LABEL
+    return (
+        CURRENT_LABEL
+        if direction == "current"
+        else EASTBOUND_LABEL
+        if direction == "eastbound"
+        else WESTBOUND_LABEL
+    )
 
 
 def run(state: WizardState) -> None:
