@@ -8,16 +8,15 @@ Data comes from VDOT's official toll calculator at [vai66tolls.com](https://vai6
 
 DISCLAIMER: I am not affiliated with i66 or VDOT in any way. I'm just some guy who doesnt like using the website. So I can't make any assurances you will pay what you see in this CLI, it's just relaying what it gets from the (undocumented) API.
 
-![Demo](demo.gif)
+![Demo](assets/demo.gif)
 
 ## How the toll works (in my understanding)
 There are 3-4 tolling segments in each direction. The price you pay for driving on a segment is locked in when you enter that segment. This may give you the impression your toll price is locked in when you enter i66. In fact, if you enter on segment 1 the toll for segment 2 can still change while you're driving on segment 1. This is why it's impossible to know your entire toll before you enter i66. And why, in my view, this tolling system should be illegal. The tills provided by the website and this command line tool can only be estimates because it’s physically impossible to enter all 3-4 segments at the same time. 
 
 There are more exits and entries than segments. The 3 segments are shown in this graphic
 
-<iframe src="https://ride66express.com/wp-content/uploads/2023/09/i-66-customer-map-v4.pdf" width="100%" height="600px">
-    This browser does not support PDFs. Please download the PDF to view it.
-</iframe>
+
+[![I-66 toll segments](docs/i-66-customer-map-v4.png)](https://ride66express.com/wp-content/uploads/2023/09/i-66-customer-map-v4.pdf)
 
 
 Eastbound segments (AM commute):
