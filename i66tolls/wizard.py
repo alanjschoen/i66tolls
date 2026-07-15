@@ -15,41 +15,44 @@ from i66tolls import prompts
 from i66tolls.api import (
     Interchange,
     _entries_for_direction,
+    get_route_zones,
     get_toll,
     infer_direction,
     list_exits,
     lookup_entry,
 )
+from i66tolls.chart import show_price_chart
 from i66tolls.hours import (
-    CURRENT_LABEL,
     EASTBOUND_LABEL,
     WESTBOUND_LABEL,
     active_direction,
     toll_window_active,
 )
-from i66tolls.prompts import GoBack
+from i66tolls.prompts import GoBack, Quit
+from i66tolls.trends import fetch_price_trends
 
 EASTERN = ZoneInfo("US/Eastern")
 Direction = Literal["eastbound", "westbound"]
-DirectionChoice = Literal["current", "eastbound", "westbound"]
+Mode = Literal["current", "historic", "chart"]
 
 
 class Step(Enum):
+    MODE = auto()
     DIRECTION = auto()
+    WEEKDAY = auto()
     ENTRY = auto()
     EXIT = auto()
-    WHEN = auto()
     DATETIME = auto()
 
 
 @dataclass
 class WizardState:
-    direction_choice: Optional[DirectionChoice] = None
+    mode: Optional[Mode] = None
     direction: Optional[Direction] = None
+    weekday: Optional[int] = None
     entry: Optional[Interchange] = None
     exit_id: Optional[int] = None
     exit_name: Optional[str] = None
-    when: Optional[Literal["current", "historic"]] = None
     at: Optional[datetime] = None
     skip_prompt: set[Step] = field(default_factory=set)
 
@@ -60,43 +63,33 @@ def build_initial_state(
     exit_id: Optional[int],
     at: Optional[datetime],
     direction: Optional[Direction],
-    direction_choice: Optional[DirectionChoice],
-    when: Optional[Literal["current", "historic"]],
+    mode: Optional[Mode],
 ) -> WizardState:
     state = WizardState()
     now = datetime.now(EASTERN)
 
-    if direction is not None:
-        state.direction = direction
-        state.direction_choice = direction
-        state.skip_prompt.add(Step.DIRECTION)
+    if mode is not None:
+        state.mode = mode
+        state.skip_prompt.add(Step.MODE)
 
-    if direction_choice == "current":
-        state.direction_choice = "current"
-        state.when = "current"
+    if mode == "current":
         state.at = now
         state.skip_prompt.add(Step.DIRECTION)
-        state.skip_prompt.add(Step.WHEN)
-
-    if when == "current":
-        state.when = "current"
-        state.at = now
-        state.skip_prompt.add(Step.WHEN)
-    elif when == "historic":
-        state.when = "historic"
-        state.skip_prompt.add(Step.WHEN)
+        state.skip_prompt.add(Step.DATETIME)
 
     if at is not None:
-        state.when = "historic"
+        state.mode = "historic"
         state.at = at.astimezone(EASTERN) if at.tzinfo else at.replace(tzinfo=EASTERN)
-        state.skip_prompt.add(Step.WHEN)
+        state.skip_prompt.add(Step.MODE)
         state.skip_prompt.add(Step.DATETIME)
+
+    if direction is not None:
+        state.direction = direction
+        state.skip_prompt.add(Step.DIRECTION)
 
     if entry_id is not None and exit_id is not None:
         inferred = infer_direction(entry_id, exit_id)
         state.direction = inferred
-        if state.direction_choice is None:
-            state.direction_choice = inferred
         state.entry = lookup_entry(entry_id, inferred)
         state.exit_id = exit_id
         for exit_option_id, exit_option_name in list_exits(state.entry):
@@ -117,22 +110,39 @@ def build_initial_state(
 
 
 def compute_steps(state: WizardState) -> list[Step]:
-    steps = [Step.DIRECTION, Step.ENTRY, Step.EXIT]
-    if state.direction_choice == "current":
+    steps: list[Step] = [Step.MODE]
+    if state.mode == "current":
+        steps.extend([Step.ENTRY, Step.EXIT])
         return steps
-    if state.when is None:
-        steps.append(Step.WHEN)
-    if state.when == "historic" and state.at is None:
+    if state.mode in ("historic", "chart"):
+        steps.append(Step.DIRECTION)
+    if state.mode == "chart":
+        steps.append(Step.WEEKDAY)
+    steps.extend([Step.ENTRY, Step.EXIT])
+    if state.mode == "historic" and state.at is None:
         steps.append(Step.DATETIME)
     return steps
 
 
 def _clear_from(state: WizardState, step: Step) -> None:
-    if step == Step.DIRECTION:
-        state.direction_choice = None
+    if step == Step.MODE:
+        state.mode = None
         state.direction = None
-        state.when = None
+        state.weekday = None
         state.at = None
+        state.entry = None
+        state.exit_id = None
+        state.exit_name = None
+    elif step == Step.DIRECTION:
+        state.direction = None
+        state.weekday = None
+        state.entry = None
+        state.exit_id = None
+        state.exit_name = None
+        if state.mode == "historic":
+            state.at = None
+    elif step == Step.WEEKDAY:
+        state.weekday = None
         state.entry = None
         state.exit_id = None
         state.exit_name = None
@@ -143,34 +153,65 @@ def _clear_from(state: WizardState, step: Step) -> None:
     elif step == Step.EXIT:
         state.exit_id = None
         state.exit_name = None
-    elif step == Step.WHEN:
-        if state.direction_choice != "current":
-            state.when = None
-            state.at = None
     elif step == Step.DATETIME:
         state.at = None
 
 
 def _prefill_value(state: WizardState, step: Step):
+    if step == Step.MODE:
+        return state.mode
     if step == Step.DIRECTION:
-        return state.direction_choice
+        return state.direction
+    if step == Step.WEEKDAY:
+        return state.weekday
     if step == Step.ENTRY:
         return state.entry.id if state.entry else None
     if step == Step.EXIT:
         return state.exit_id
-    if step == Step.WHEN:
-        return state.when
     if step == Step.DATETIME:
         return state.at
     return None
 
 
+def _apply_current_mode(state: WizardState) -> None:
+    now = datetime.now(EASTERN)
+    direction = active_direction(now)
+    if direction is None:
+        typer.echo("There are no tolls right now.")
+        raise typer.Exit(0)
+    state.direction = direction
+    state.at = now
+
+
 def _run_step(state: WizardState, step: Step):
-    if step == Step.DIRECTION:
-        result = prompts.select_direction(default=state.direction_choice)
+    if step == Step.MODE:
+        result = prompts.select_mode(default=state.mode)
+        if result is Quit:
+            return Quit
         if result is GoBack:
             return GoBack
-        return _apply_direction(state, result)
+        state.mode = result
+        if result == "current":
+            _apply_current_mode(state)
+        return None
+
+    if step == Step.DIRECTION:
+        result = prompts.select_route_direction(default=state.direction)
+        if result is Quit:
+            return Quit
+        if result is GoBack:
+            return GoBack
+        state.direction = result
+        return None
+
+    if step == Step.WEEKDAY:
+        result = prompts.select_weekday(default=state.weekday)
+        if result is Quit:
+            return Quit
+        if result is GoBack:
+            return GoBack
+        state.weekday = result
+        return None
 
     if step == Step.ENTRY:
         if state.direction is None:
@@ -180,6 +221,8 @@ def _run_step(state: WizardState, step: Step):
         result = prompts.select_interchange(
             "Entry", options, default_id=_prefill_value(state, step)
         )
+        if result is Quit:
+            return Quit
         if result is GoBack:
             return GoBack
         entry_id, entry_name = result
@@ -196,24 +239,17 @@ def _run_step(state: WizardState, step: Step):
             list_exits(state.entry),
             default_id=_prefill_value(state, step),
         )
+        if result is Quit:
+            return Quit
         if result is GoBack:
             return GoBack
         state.exit_id, state.exit_name = result
         return None
 
-    if step == Step.WHEN:
-        result = prompts.select_when(default=state.when)
-        if result is GoBack:
-            return GoBack
-        state.when = result
-        if result == "current":
-            state.at = datetime.now(EASTERN)
-        else:
-            state.at = None
-        return None
-
     if step == Step.DATETIME:
         result = prompts.prompt_datetime(default=state.at)
+        if result is Quit:
+            return Quit
         if result is GoBack:
             return GoBack
         state.at = result.replace(tzinfo=EASTERN)
@@ -222,47 +258,29 @@ def _run_step(state: WizardState, step: Step):
     raise RuntimeError(f"unknown step: {step}")
 
 
-def _apply_direction(state: WizardState, choice: DirectionChoice) -> None:
-    state.direction_choice = choice
-    if choice == "current":
-        now = datetime.now(EASTERN)
-        direction = active_direction(now)
-        if direction is None:
-            typer.echo("There are no tolls right now.")
-            raise typer.Exit(0)
-        state.direction = direction
-        state.when = "current"
-        state.at = now
-        return
-
-    state.direction = choice
-    state.when = None
-    state.at = None
-
-
 def is_complete(state: WizardState) -> bool:
-    if state.direction is None or state.entry is None or state.exit_id is None:
+    if state.mode is None or state.entry is None or state.exit_id is None:
         return False
-    if state.direction_choice == "current":
-        return state.at is not None
-    if state.when is None:
-        return False
-    if state.when == "current":
-        return True
-    return state.at is not None
+    if state.mode == "current":
+        return state.direction is not None and state.at is not None
+    if state.mode == "chart":
+        return state.direction is not None and state.weekday is not None
+    if state.mode == "historic":
+        return state.direction is not None and state.at is not None
+    return False
 
 
 def _step_done(state: WizardState, step: Step) -> bool:
+    if step == Step.MODE:
+        return state.mode is not None
     if step == Step.DIRECTION:
-        if state.direction_choice == "current":
-            return state.direction is not None
-        return state.direction_choice is not None and state.direction is not None
+        return state.direction is not None
+    if step == Step.WEEKDAY:
+        return state.weekday is not None
     if step == Step.ENTRY:
         return state.entry is not None
     if step == Step.EXIT:
         return state.exit_id is not None
-    if step == Step.WHEN:
-        return state.when is not None
     if step == Step.DATETIME:
         return state.at is not None
     return True
@@ -290,15 +308,17 @@ def run_wizard(state: WizardState) -> WizardState:
 
         if _should_skip_step(state, step):
             if (
-                step == Step.DIRECTION
-                and state.direction_choice == "current"
+                step == Step.MODE
+                and state.mode == "current"
                 and state.direction is None
             ):
-                _apply_direction(state, "current")
+                _apply_current_mode(state)
             state.skip_prompt.discard(step)
             continue
 
         result = _run_step(state, step)
+        if result is Quit:
+            raise typer.Exit(0)
         if result is GoBack:
             step_index = steps.index(step)
             if step_index == 0:
@@ -316,15 +336,13 @@ def run_wizard(state: WizardState) -> WizardState:
 def show_result(state: WizardState) -> None:
     if state.entry is None or state.exit_id is None or state.direction is None:
         raise RuntimeError("incomplete wizard state")
-    if state.when is None:
-        raise RuntimeError("incomplete wizard state: when is unset")
-    if state.when == "historic" and state.at is None:
+    if state.mode == "historic" and state.at is None:
         raise RuntimeError(
             "incomplete wizard state: historic lookup requires a date/time"
         )
 
     at = state.at if state.at is not None else datetime.now(EASTERN)
-    if state.when == "current" and not toll_window_active(at, state.direction):
+    if state.mode == "current" and not toll_window_active(at, state.direction):
         typer.echo("There is no current toll for this route right now.")
         return
 
@@ -332,10 +350,10 @@ def show_result(state: WizardState) -> None:
         state.entry,
         state.exit_id,
         at=at,
-        is_current=state.when == "current",
+        is_current=state.mode == "current",
     )
     label = _direction_label(state.direction)
-    when_label = at.strftime("%m/%d/%Y %I:%M %p") if state.when == "historic" else "now"
+    when_label = at.strftime("%m/%d/%Y %I:%M %p") if state.mode == "historic" else "now"
     if amount is None:
         typer.echo(
             f"{label}: {state.entry.name} → {state.exit_name}: Data Not Available ({when_label})"
@@ -346,27 +364,57 @@ def show_result(state: WizardState) -> None:
     )
 
 
-def _direction_label(direction: Direction) -> str:
-    return (
-        CURRENT_LABEL
-        if direction == "current"
-        else EASTBOUND_LABEL
-        if direction == "eastbound"
-        else WESTBOUND_LABEL
+def show_chart_result(state: WizardState) -> None:
+    if (
+        state.entry is None
+        or state.exit_id is None
+        or state.direction is None
+        or state.weekday is None
+    ):
+        raise RuntimeError("incomplete wizard state")
+
+    trends = fetch_price_trends()
+    begin_zone, end_zone = get_route_zones(state.entry, state.exit_id)
+    times, prices = trends.series(
+        state.direction,
+        state.weekday,
+        begin_zone,
+        end_zone,
     )
+    show_price_chart(
+        weekday=state.weekday,
+        entry_name=state.entry.name,
+        exit_name=state.exit_name or str(state.exit_id),
+        times=times,
+        prices=prices,
+        week_count=trends.week_count,
+    )
+
+
+def _direction_label(direction: Direction) -> str:
+    return EASTBOUND_LABEL if direction == "eastbound" else WESTBOUND_LABEL
 
 
 def run(state: WizardState) -> None:
     if is_complete(state):
-        show_result(state)
+        if state.mode == "chart":
+            show_chart_result(state)
+        else:
+            show_result(state)
         return
 
     if not sys.stdin.isatty():
         typer.echo("error: incomplete arguments for non-interactive use", err=True)
         raise typer.Exit(1)
 
-    state = run_wizard(state)
+    try:
+        state = run_wizard(state)
+    except KeyboardInterrupt:
+        raise typer.Exit(130) from None
     if not is_complete(state):
         typer.echo("error: lookup cancelled or incomplete", err=True)
         raise typer.Exit(1)
-    show_result(state)
+    if state.mode == "chart":
+        show_chart_result(state)
+    else:
+        show_result(state)

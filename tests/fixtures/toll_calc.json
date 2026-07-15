@@ -1,1 +1,1 @@
-{"jsToRun":"displayTollAmount('$4.50')","decToll":4.5}
+{"jsToRun":"displayTollAmount('$4.50'); runChartMake(1,0,1,\"I-66 West\",\"Westmoreland St\")","decToll":4.5}

@@ -65,18 +65,11 @@ def main(
     elif westbound:
         direction = "westbound"
 
-    direction_choice = None
-    when = None
+    mode = None
     if current:
-        when = "current"
-        if direction is not None:
-            direction_choice = direction
-        elif entry is not None and exit is not None:
-            direction_choice = "current"
-        else:
-            direction_choice = "current"
+        mode = "current"
     elif time is not None:
-        when = "historic"
+        mode = "historic"
 
     try:
         state = build_initial_state(
@@ -84,8 +77,7 @@ def main(
             exit_id=exit,
             at=_parse_time(time),
             direction=direction,
-            direction_choice=direction_choice,
-            when=when,
+            mode=mode,
         )
     except typer.BadParameter:
         raise

@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 BASE_URL = "https://vai66tolls.com/Index"
 EASTERN = ZoneInfo("US/Eastern")
 OPTION_RE = re.compile(r'<option value="(\d+)">([^<]+)</option>')
+RUN_CHART_RE = re.compile(r"runChartMake\(\d+,(\d+),(\d+),")
 
 Direction = Literal["eastbound", "westbound"]
 
@@ -38,7 +39,10 @@ def _parse_options(html: str) -> list[tuple[int, str]]:
 def _entries_for_direction(eastbound: bool) -> list[Interchange]:
     direction: Direction = "eastbound" if eastbound else "westbound"
     html = _fetch("BeginIntPartial", {"rbEastVal": "true" if eastbound else "false"})
-    return [Interchange(id=id_, name=name, direction=direction) for id_, name in _parse_options(html)]
+    return [
+        Interchange(id=id_, name=name, direction=direction)
+        for id_, name in _parse_options(html)
+    ]
 
 
 def list_entries() -> list[Interchange]:
@@ -54,13 +58,13 @@ def list_exits(entry: Interchange) -> list[tuple[int, str]]:
     return _parse_options(html)
 
 
-def get_toll(
+def _toll_calc_response(
     entry: Interchange,
     exit_id: int,
     *,
     at: Optional[datetime] = None,
     is_current: bool = True,
-) -> Optional[float]:
+) -> dict[str, object]:
     when = at.astimezone(EASTERN) if at is not None else datetime.now(EASTERN)
     eastbound = entry.direction == "eastbound"
     body = _fetch(
@@ -74,10 +78,36 @@ def get_toll(
             "isCurrent": "true" if is_current else "false",
         },
     )
-    amount = float(json.loads(body)["decToll"])
+    return json.loads(body)
+
+
+def get_toll(
+    entry: Interchange,
+    exit_id: int,
+    *,
+    at: Optional[datetime] = None,
+    is_current: bool = True,
+) -> Optional[float]:
+    amount = float(
+        _toll_calc_response(entry, exit_id, at=at, is_current=is_current)["decToll"]
+    )
     if amount == -1:
         return None
     return amount
+
+
+def get_route_zones(
+    entry: Interchange,
+    exit_id: int,
+    *,
+    at: Optional[datetime] = None,
+) -> tuple[int, int]:
+    response = _toll_calc_response(entry, exit_id, at=at, is_current=False)
+    js_to_run = str(response["jsToRun"])
+    match = RUN_CHART_RE.search(js_to_run)
+    if match is None:
+        raise ValueError("route zone data not available")
+    return int(match.group(1)), int(match.group(2))
 
 
 def infer_direction(entry_id: int, exit_id: int) -> Direction:
@@ -95,7 +125,9 @@ def infer_direction(entry_id: int, exit_id: int) -> Direction:
         raise ValueError(f"No route found for entry {entry_id} and exit {exit_id}")
 
     if len(matches) > 1:
-        raise ValueError(f"Entry {entry_id} and exit {exit_id} are ambiguous across directions")
+        raise ValueError(
+            f"Entry {entry_id} and exit {exit_id} are ambiguous across directions"
+        )
 
     return matches[0]
 

@@ -29,6 +29,7 @@ dependencies = [
     "typer>=0.12",
     "its-a-dt>=0.1.1",
     "prompt-toolkit>=3.0",
+    "plotext>=5.2",
 ]
 
 [project.urls]

@@ -8,6 +8,7 @@ from typing import Generic, Optional, TypeVar, Union
 from zoneinfo import ZoneInfo
 
 from its_a_dt import Bounds, pick_datetime
+from its_a_dt import Cancelled as DtCancelled
 from its_a_dt import GoBack as DtGoBack
 from prompt_toolkit.application import Application
 from prompt_toolkit.formatted_text import FormattedText
@@ -19,7 +20,8 @@ from prompt_toolkit.layout.layout import Window
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
 
-from i66tolls.hours import CURRENT_LABEL, EASTBOUND_LABEL, WESTBOUND_LABEL
+from i66tolls.hours import EASTBOUND_LABEL, WESTBOUND_LABEL
+from i66tolls.trends import WEEKDAY_NAMES
 
 EASTERN = ZoneInfo("US/Eastern")
 T = TypeVar("T")
@@ -37,10 +39,15 @@ class GoBack(Exception):
     """Sentinel returned when the user presses left arrow to go back."""
 
 
+class Quit(Exception):
+    """Sentinel returned when the user presses q to exit cleanly."""
+
+
 @dataclass
 class _ListState(Generic[T]):
     focus_index: int
     go_back: bool = False
+    quit: bool = False
     selected: Optional[T] = None
 
 
@@ -58,7 +65,7 @@ def _pick_list(
     choices: list[tuple[T, str]],
     *,
     default: Optional[T] = None,
-) -> Union[T, type[GoBack]]:
+) -> Union[T, type[GoBack], type[Quit]]:
     if not choices:
         raise ValueError("choices must not be empty")
 
@@ -73,7 +80,7 @@ def _pick_list(
             else:
                 lines.append(("", f"{prefix}{label}\n"))
         lines.append(("", "\n"))
-        lines.append(("class:hint", "  ← back  ↑↓ navigate  Enter select"))
+        lines.append(("class:hint", "  ← back  ↑↓ navigate  Enter select  q quit"))
         return FormattedText(lines)
 
     kb = KeyBindings()
@@ -95,6 +102,16 @@ def _pick_list(
         state.go_back = True
         event.app.exit()
 
+    @kb.add("q", eager=True)
+    @kb.add("Q", eager=True)
+    def quit_app(event) -> None:
+        state.quit = True
+        event.app.exit()
+
+    @kb.add("c-c", eager=True)
+    def force_quit(event) -> None:
+        event.app.exit(exception=KeyboardInterrupt())
+
     @kb.add("enter")
     def select(event) -> None:
         state.selected = choices[state.focus_index][0]
@@ -114,6 +131,8 @@ def _pick_list(
     with patch_stdout():
         app.run()
 
+    if state.quit:
+        return Quit
     if state.go_back:
         return GoBack
     if state.selected is None:
@@ -121,16 +140,35 @@ def _pick_list(
     return state.selected
 
 
-def select_direction(
+def select_mode(
     *,
     default: Optional[str] = None,
-) -> Union[str, type[GoBack]]:
+) -> Union[str, type[GoBack], type[Quit]]:
     choices: list[tuple[str, str]] = [
-        ("current", CURRENT_LABEL),
+        ("current", "Current toll price"),
+        ("chart", "Historic chart"),
+        ("historic", "Historic toll price"),
+    ]
+    return _pick_list("What would you like to do?", choices, default=default)
+
+
+def select_route_direction(
+    *,
+    default: Optional[str] = None,
+) -> Union[str, type[GoBack], type[Quit]]:
+    choices: list[tuple[str, str]] = [
         ("eastbound", EASTBOUND_LABEL),
         ("westbound", WESTBOUND_LABEL),
     ]
     return _pick_list("Direction", choices, default=default)
+
+
+def select_weekday(
+    *,
+    default: Optional[int] = None,
+) -> Union[int, type[GoBack], type[Quit]]:
+    choices = [(index, name) for index, name in enumerate(WEEKDAY_NAMES)]
+    return _pick_list("Day of week", choices, default=default)
 
 
 def select_interchange(
@@ -138,20 +176,15 @@ def select_interchange(
     options: list[tuple[int, str]],
     *,
     default_id: Optional[int] = None,
-) -> Union[tuple[int, str], type[GoBack]]:
+) -> Union[tuple[int, str], type[GoBack], type[Quit]]:
     choices = [((id_, name), f"{id_:>2}  {name}") for id_, name in options]
     default = next((choice for choice in choices if choice[0][0] == default_id), None)
     return _pick_list(message, choices, default=default)
 
 
-def select_when(*, default: Optional[str] = None) -> Union[str, type[GoBack]]:
-    choices = [("current", "current"), ("historic", "historic")]
-    return _pick_list("When", choices, default=default)
-
-
 def prompt_datetime(
     *, default: Optional[datetime] = None
-) -> Union[datetime, type[GoBack]]:
+) -> Union[datetime, type[GoBack], type[Quit]]:
     now = datetime.now(EASTERN).replace(tzinfo=None)
     default_naive = None
     if default is not None:
@@ -161,11 +194,14 @@ def prompt_datetime(
             else default
         )
 
-    result = pick_datetime(
-        bounds=Bounds(max=now),
-        default=default_naive,
-        title="Historic date and time",
-    )
+    try:
+        result = pick_datetime(
+            bounds=Bounds(max=now),
+            default=default_naive,
+            title="Historic date and time",
+        )
+    except DtCancelled:
+        return Quit
     if result is DtGoBack:
         return GoBack
     return result
