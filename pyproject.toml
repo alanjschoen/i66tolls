@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "i66tolls"
-version = "0.1.1"
+version = "0.1.2"
 description = "CLI for I-66 inside-the-Beltway toll lookups"
 readme = "README.md"
 license = "MIT"

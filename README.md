@@ -1,6 +1,6 @@
 # i66tolls
 
-Vibe coded command-line tool for checking tolls on I-66 inside the Capital Beltway (between I-495 and the Theodore Roosevelt Bridge).
+Command-line tool to check tolls on I-66 inside the Capital Beltway (between I-495 and the Theodore Roosevelt Bridge).
 
 Run it with no arguments for an interactive wizard, or pass entry/exit IDs and flags for a quick lookup.
 
