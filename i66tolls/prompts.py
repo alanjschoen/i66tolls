@@ -168,6 +168,10 @@ def select_weekday(
     default: Optional[int] = None,
 ) -> Union[int, type[GoBack], type[Quit]]:
     choices = [(index, name) for index, name in enumerate(WEEKDAY_NAMES)]
+    if default is None:
+        # Mon–Fri are 0–4; on weekends focus Monday
+        today = datetime.now(EASTERN).weekday()
+        default = today if today <= 4 else 0
     return _pick_list("Day of week", choices, default=default)
 
 
