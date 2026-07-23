@@ -1,3 +1,3 @@
-from i66tolls.cli import main
+from i66tolls.cli import main_entry
 
-main()
+main_entry()

@@ -7,8 +7,10 @@ import pytest
 
 from i66tolls.api import (
     Interchange,
+    _parse_entries,
     _parse_options,
     get_toll,
+    get_zone_prices,
     infer_direction,
     lookup_entry,
 )
@@ -27,6 +29,15 @@ def test_parse_options_skips_empty_values() -> None:
         (1, "I-66 West"),
         (2, "I-495 N"),
         (9, "Glebe Road"),
+    ]
+
+
+def test_parse_entries_includes_zones() -> None:
+    entries = _parse_entries(read_fixture("begin_east.html"), "eastbound")
+    assert entries == [
+        Interchange(id=1, name="I-66 West", direction="eastbound", zone=0),
+        Interchange(id=2, name="I-495 N", direction="eastbound", zone=0),
+        Interchange(id=9, name="Glebe Road", direction="eastbound", zone=3),
     ]
 
 
@@ -86,3 +97,44 @@ def test_lookup_entry() -> None:
     assert entry.id == 1
     assert entry.name == "I-66 West"
     assert entry.direction == "eastbound"
+    assert entry.zone == 0
+
+
+def test_get_zone_prices() -> None:
+    def fake_fetch(handler: str, params: dict[str, str]) -> str:
+        if handler == "BeginIntPartial":
+            return read_fixture("begin_east.html")
+        if handler == "ExitIntPartial":
+            entry_id = params["bIntId"]
+            if entry_id == "1":
+                return (
+                    '<option value="4">Route 7</option>'
+                    '<option value="10">Westmoreland St</option>'
+                )
+            if entry_id == "9":
+                return '<option value="13">Spout Run</option>'
+            return '<option value="99">Other</option>'
+        if handler == "TollCalcPartial":
+            entry_id = params["bIntId"]
+            exit_id = params["eIntId"]
+            if entry_id == "1" and exit_id == "4":
+                return (
+                    '{"jsToRun":"runChartMake(1,0,0,\\"I-66 West\\",\\"Route 7\\")",'
+                    '"decToll":1.05}'
+                )
+            if entry_id == "1" and exit_id == "10":
+                return (
+                    '{"jsToRun":"runChartMake(1,0,1,\\"I-66 West\\",\\"Westmoreland\\")",'
+                    '"decToll":3.05}'
+                )
+            if entry_id == "9" and exit_id == "13":
+                return (
+                    '{"jsToRun":"runChartMake(1,3,3,\\"Glebe Road\\",\\"Spout Run\\")",'
+                    '"decToll":10.0}'
+                )
+            raise AssertionError(f"unexpected toll calc {params}")
+        raise AssertionError(f"unexpected fetch: {handler} {params}")
+
+    at = datetime(2026, 6, 10, 8, 0, tzinfo=EASTERN)
+    with patch("i66tolls.api._fetch", side_effect=fake_fetch):
+        assert get_zone_prices("eastbound", at=at, is_current=True) == (1.05, 10.0)

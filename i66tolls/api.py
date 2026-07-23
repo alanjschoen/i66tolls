@@ -15,6 +15,18 @@ BASE_URL = "https://vai66tolls.com/Index"
 EASTERN = ZoneInfo("US/Eastern")
 OPTION_RE = re.compile(r'<option value="(\d+)">([^<]+)</option>')
 RUN_CHART_RE = re.compile(r"runChartMake\(\d+,(\d+),(\d+),")
+# Exit(name, x, y, dir, id, lat, lng, enterZoneId, ...)
+EXIT_CTOR_RE = re.compile(
+    r"new Exit\("
+    r"'([^']+)',\s*"
+    r"[^,]+,\s*"
+    r"[^,]+,\s*"
+    r"'([^']+)',\s*"
+    r"(\d+),\s*"
+    r"[^,]+,\s*"
+    r"[^,]+,\s*"
+    r"(\d+)"
+)
 
 Direction = Literal["eastbound", "westbound"]
 
@@ -24,6 +36,7 @@ class Interchange:
     id: int
     name: str
     direction: Direction
+    zone: Optional[int] = None
 
 
 def _fetch(handler: str, params: dict[str, str]) -> str:
@@ -36,13 +49,30 @@ def _parse_options(html: str) -> list[tuple[int, str]]:
     return [(int(match[0]), match[1].strip()) for match in OPTION_RE.findall(html)]
 
 
-def _entries_for_direction(eastbound: bool) -> list[Interchange]:
-    direction: Direction = "eastbound" if eastbound else "westbound"
-    html = _fetch("BeginIntPartial", {"rbEastVal": "true" if eastbound else "false"})
+def _parse_entries(html: str, direction: Direction) -> list[Interchange]:
+    expected_dir = "eb" if direction == "eastbound" else "wb"
+    from_ctors = [
+        Interchange(
+            id=int(match.group(3)),
+            name=match.group(1),
+            direction=direction,
+            zone=int(match.group(4)) - 1,
+        )
+        for match in EXIT_CTOR_RE.finditer(html)
+        if match.group(2) == expected_dir
+    ]
+    if from_ctors:
+        return from_ctors
     return [
         Interchange(id=id_, name=name, direction=direction)
         for id_, name in _parse_options(html)
     ]
+
+
+def _entries_for_direction(eastbound: bool) -> list[Interchange]:
+    direction: Direction = "eastbound" if eastbound else "westbound"
+    html = _fetch("BeginIntPartial", {"rbEastVal": "true" if eastbound else "false"})
+    return _parse_entries(html, direction)
 
 
 def list_entries() -> list[Interchange]:
@@ -81,6 +111,21 @@ def _toll_calc_response(
     return json.loads(body)
 
 
+def _zones_from_response(response: dict[str, object]) -> tuple[int, int]:
+    js_to_run = str(response["jsToRun"])
+    match = RUN_CHART_RE.search(js_to_run)
+    if match is None:
+        raise ValueError("route zone data not available")
+    return int(match.group(1)), int(match.group(2))
+
+
+def _amount_from_response(response: dict[str, object]) -> Optional[float]:
+    amount = float(response["decToll"])
+    if amount == -1:
+        return None
+    return amount
+
+
 def get_toll(
     entry: Interchange,
     exit_id: int,
@@ -88,12 +133,9 @@ def get_toll(
     at: Optional[datetime] = None,
     is_current: bool = True,
 ) -> Optional[float]:
-    amount = float(
-        _toll_calc_response(entry, exit_id, at=at, is_current=is_current)["decToll"]
+    return _amount_from_response(
+        _toll_calc_response(entry, exit_id, at=at, is_current=is_current)
     )
-    if amount == -1:
-        return None
-    return amount
 
 
 def get_route_zones(
@@ -103,11 +145,48 @@ def get_route_zones(
     at: Optional[datetime] = None,
 ) -> tuple[int, int]:
     response = _toll_calc_response(entry, exit_id, at=at, is_current=False)
-    js_to_run = str(response["jsToRun"])
-    match = RUN_CHART_RE.search(js_to_run)
-    if match is None:
-        raise ValueError("route zone data not available")
-    return int(match.group(1)), int(match.group(2))
+    return _zones_from_response(response)
+
+
+def get_zone_prices(
+    direction: Direction,
+    *,
+    at: Optional[datetime] = None,
+    is_current: bool = True,
+) -> tuple[Optional[float], ...]:
+    """Return the per-zone toll for each pricing zone in ``direction``.
+
+    Eastbound zones are 0–3; westbound zones are 4–7. Each value is the toll for
+    a single-zone entry→exit pair covering that zone, or ``None`` when the
+    calculator has no data.
+    """
+    entries = _entries_for_direction(direction == "eastbound")
+    zones = sorted({entry.zone for entry in entries if entry.zone is not None})
+    if not zones:
+        raise ValueError("entry zone data not available")
+
+    prices: list[Optional[float]] = []
+    for zone in zones:
+        price: Optional[float] = None
+        found = False
+        for entry in entries:
+            if entry.zone != zone:
+                continue
+            for exit_id, _ in list_exits(entry):
+                response = _toll_calc_response(
+                    entry, exit_id, at=at, is_current=is_current
+                )
+                begin, end = _zones_from_response(response)
+                if begin == end == zone:
+                    price = _amount_from_response(response)
+                    found = True
+                    break
+            if found:
+                break
+        if not found:
+            raise ValueError(f"no single-zone route found for zone {zone}")
+        prices.append(price)
+    return tuple(prices)
 
 
 def infer_direction(entry_id: int, exit_id: int) -> Direction:
