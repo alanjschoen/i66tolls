@@ -18,6 +18,44 @@ WEEK_COUNT_RE = re.compile(r"var weekCount = (\d+);")
 Direction = Literal["eastbound", "westbound"]
 WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
 
+# 15-minute sample grids used by vai66tolls.com during toll windows.
+EASTBOUND_SAMPLE_TIMES: tuple[str, ...] = (
+    "05:30 AM",
+    "05:45 AM",
+    "06:00 AM",
+    "06:15 AM",
+    "06:30 AM",
+    "06:45 AM",
+    "07:00 AM",
+    "07:15 AM",
+    "07:30 AM",
+    "07:45 AM",
+    "08:00 AM",
+    "08:15 AM",
+    "08:30 AM",
+    "08:45 AM",
+    "09:00 AM",
+    "09:15 AM",
+)
+WESTBOUND_SAMPLE_TIMES: tuple[str, ...] = (
+    "03:00 PM",
+    "03:15 PM",
+    "03:30 PM",
+    "03:45 PM",
+    "04:00 PM",
+    "04:15 PM",
+    "04:30 PM",
+    "04:45 PM",
+    "05:00 PM",
+    "05:15 PM",
+    "05:30 PM",
+    "05:45 PM",
+    "06:00 PM",
+    "06:15 PM",
+    "06:30 PM",
+    "06:45 PM",
+)
+
 _cached_trends: Optional["PriceTrends"] = None
 
 

@@ -96,6 +96,23 @@ When both entry and exit are given, direction is inferred automatically.
 - `--current` and `--time` cannot be used together
 - Provide both entry and exit IDs, or neither
 
+## Historical scrape
+
+Download per-zone toll history for model training or analysis. Data is stored locally and sync runs only fetch missing weekdays before today.
+
+Default storage: `~/.local/share/i66tolls/history/` (override with `--data-dir` or `I66TOLLS_DATA_DIR`).
+
+```bash
+i66tolls scrape "1 week"
+i66tolls scrape "2 weeks"
+i66tolls scrape "1 month"
+i66tolls scrape "7d" --dry-run
+```
+
+Each weekday stores 15-minute samples during toll windows in `YYYY-MM-DD/eastbound.json` and `YYYY-MM-DD/westbound.json`. Re-running widens or refreshes the window but skips days already complete. Today is never scraped.
+
+Rate limits default to `--delay 0.1` and `--jitter 0.2` seconds between API calls.
+
 ## Toll hours
 
 | Direction | Hours |

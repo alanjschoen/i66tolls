@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from typer.testing import CliRunner
 
-from i66tolls.cli import app, show_state
+from i66tolls.cli import app, scrape_app, show_state
 
 runner = CliRunner()
 EASTERN = ZoneInfo("US/Eastern")
@@ -81,3 +81,13 @@ def test_show_state_outside_hours_prints_time_only(
     output = capsys.readouterr().out
     assert output == "06/10/2026 12:00 PM\n"
     prices.assert_not_called()
+
+
+def test_scrape_dry_run(tmp_path) -> None:
+    result = runner.invoke(
+        scrape_app,
+        ["1 week", "--dry-run", "--data-dir", str(tmp_path)],
+    )
+    assert result.exit_code == 0
+    assert "planned:" in result.output
+

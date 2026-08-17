@@ -6,7 +6,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Callable, Literal, Optional
 from urllib.parse import urlencode
 from urllib.request import urlopen
 from zoneinfo import ZoneInfo
@@ -30,6 +30,9 @@ EXIT_CTOR_RE = re.compile(
 
 Direction = Literal["eastbound", "westbound"]
 
+FetchFn = Callable[[str, dict[str, str]], str]
+_active_fetch: Optional[FetchFn] = None
+
 
 @dataclass(frozen=True)
 class Interchange:
@@ -39,7 +42,14 @@ class Interchange:
     zone: Optional[int] = None
 
 
+def set_active_fetch(fetch: Optional[FetchFn]) -> None:
+    global _active_fetch
+    _active_fetch = fetch
+
+
 def _fetch(handler: str, params: dict[str, str]) -> str:
+    if _active_fetch is not None:
+        return _active_fetch(handler, params)
     query = urlencode({"handler": handler, **params})
     with urlopen(f"{BASE_URL}?{query}", timeout=30) as response:
         return response.read().decode()
